@@ -1,0 +1,341 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum GameMode {
+  TWO_V_TWO
+  FIVE_V_FIVE
+}
+
+enum QueueType {
+  SOLO
+  TEAM
+}
+
+enum MatchStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum TeamMemberRole {
+  CAPTAIN
+  MEMBER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REFUSED
+  EXPIRED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum SanctionType {
+  WARNING
+  TEMP_BAN
+  PERM_BAN
+  ELO_PENALTY
+}
+
+enum TournamentStatus {
+  UPCOMING
+  ONGOING
+  FINISHED
+  CANCELLED
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  email         String   @unique
+  passwordHash  String
+  avatarUrl     String?
+  role          Role     @default(USER)
+  isBanned      Boolean  @default(false)
+  banExpiresAt  DateTime?
+  preferredRole String?
+  region        String?  @default("EU")
+
+  // Elo global + par mode
+  eloGlobal     Int      @default(1000)
+  elo2v2        Int      @default(1000)
+  elo5v5        Int      @default(1000)
+
+  // Statistiques
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  totalMatches  Int      @default(0)
+  winStreak     Int      @default(0)
+  bestStreak    Int      @default(0)
+
+  // Activité
+  lastActiveAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  teamMemberships   TeamMember[]
+  matchParticipants MatchParticipant[]
+  sentInvitations   TeamInvitation[]  @relation("InvitationSender")
+  receivedInvitations TeamInvitation[] @relation("InvitationReceiver")
+  eloHistory        EloHistory[]
+  reportsFiled      Report[]          @relation("ReportFiler")
+  reportsAgainst    Report[]          @relation("ReportTarget")
+  sanctions         Sanction[]
+  news              News[]
+  queueEntries      QueueEntry[]
+
+  @@index([eloGlobal])
+  @@index([elo2v2])
+  @@index([elo5v5])
+}
+
+// ─── Team ─────────────────────────────────────────────────────────────────────
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  tag         String   @unique // e.g. [PKL]
+  avatarUrl   String?
+  description String?
+  region      String?  @default("EU")
+
+  // Stats
+  eloTeam     Int      @default(1000)
+  wins        Int      @default(0)
+  losses      Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members     TeamMember[]
+  invitations TeamInvitation[]
+  matchParticipants MatchTeamParticipant[]
+  queueEntries      QueueEntry[]
+
+  @@index([eloTeam])
+}
+
+model TeamMember {
+  id        String         @id @default(uuid())
+  userId    String
+  teamId    String
+  role      TeamMemberRole @default(MEMBER)
+  joinedAt  DateTime       @default(now())
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+model TeamInvitation {
+  id         String           @id @default(uuid())
+  teamId     String
+  senderId   String
+  receiverId String
+  status     InvitationStatus @default(PENDING)
+  expiresAt  DateTime
+  createdAt  DateTime         @default(now())
+
+  team       Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  sender     User @relation("InvitationSender", fields: [senderId], references: [id])
+  receiver   User @relation("InvitationReceiver", fields: [receiverId], references: [id])
+}
+
+// ─── Queue ────────────────────────────────────────────────────────────────────
+
+model QueueEntry {
+  id         String    @id @default(uuid())
+  userId     String?
+  teamId     String?
+  mode       GameMode
+  queueType  QueueType
+  eloAtEntry Int
+  joinedAt   DateTime  @default(now())
+  isActive   Boolean   @default(true)
+
+  user       User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  team       Team?  @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([mode, queueType, isActive])
+}
+
+// ─── Match ────────────────────────────────────────────────────────────────────
+
+model Match {
+  id            String      @id @default(uuid())
+  mode          GameMode
+  queueType     QueueType
+  status        MatchStatus @default(PENDING)
+
+  // Équipes (pour solo, team1/team2 = groupes de joueurs)
+  winnerTeamId  String?
+  winnerSide    Int?        // 1 ou 2
+
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  participants        MatchParticipant[]
+  teamParticipants    MatchTeamParticipant[]
+  dispute             Dispute?
+  eloChanges          EloHistory[]
+
+  @@index([status])
+  @@index([mode])
+}
+
+model MatchParticipant {
+  id         String @id @default(uuid())
+  matchId    String
+  userId     String
+  team       Int    // 1 ou 2
+  eloChange  Int    @default(0)
+  eloBefore  Int
+  eloAfter   Int?
+  isWinner   Boolean?
+
+  match      Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user       User  @relation(fields: [userId], references: [id])
+
+  @@unique([matchId, userId])
+}
+
+model MatchTeamParticipant {
+  id        String @id @default(uuid())
+  matchId   String
+  teamId    String
+  side      Int    // 1 ou 2
+  isWinner  Boolean?
+
+  match     Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team      Team  @relation(fields: [teamId], references: [id])
+
+  @@unique([matchId, teamId])
+}
+
+// ─── Elo History ──────────────────────────────────────────────────────────────
+
+model EloHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  matchId   String?
+  mode      GameMode
+  eloBefore Int
+  eloAfter  Int
+  change    Int
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match     Match? @relation(fields: [matchId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── Dispute ──────────────────────────────────────────────────────────────────
+
+model Dispute {
+  id          String        @id @default(uuid())
+  matchId     String        @unique
+  description String
+  status      DisputeStatus @default(OPEN)
+  resolution  String?
+  createdAt   DateTime      @default(now())
+  resolvedAt  DateTime?
+
+  match       Match @relation(fields: [matchId], references: [id])
+}
+
+// ─── Report ───────────────────────────────────────────────────────────────────
+
+model Report {
+  id         String   @id @default(uuid())
+  filerId    String
+  targetId   String
+  reason     String
+  details    String?
+  isResolved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  filer      User @relation("ReportFiler", fields: [filerId], references: [id])
+  target     User @relation("ReportTarget", fields: [targetId], references: [id])
+}
+
+// ─── Sanction ─────────────────────────────────────────────────────────────────
+
+model Sanction {
+  id          String       @id @default(uuid())
+  userId      String
+  type        SanctionType
+  reason      String
+  duration    Int?         // en heures pour les bans temporaires
+  eloPenalty  Int?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime?
+
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── News ─────────────────────────────────────────────────────────────────────
+
+model News {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  coverImage  String?
+  isPinned    Boolean  @default(false)
+  isPublished Boolean  @default(false)
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User @relation(fields: [authorId], references: [id])
+}
+
+// ─── Tournament ───────────────────────────────────────────────────────────────
+
+model Tournament {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  mode        GameMode
+  maxTeams    Int              @default(8)
+  prizePool   String?
+  status      TournamentStatus @default(UPCOMING)
+  startDate   DateTime
+  endDate     DateTime?
+  coverImage  String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
