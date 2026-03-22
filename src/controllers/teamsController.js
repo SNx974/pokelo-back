@@ -53,11 +53,12 @@ const getTeam = async (req, res, next) => {
 };
 
 /**
- * Renvoie l'équipe du joueur connecté (première équipe trouvée).
+ * Renvoie les équipes du joueur connecté — une par mode (2v2 + 5v5).
+ * Réponse: { TWO_V_TWO: { team, role } | null, FIVE_V_FIVE: { team, role } | null }
  */
 const getMyTeam = async (req, res, next) => {
   try {
-    const membership = await prisma.teamMember.findFirst({
+    const memberships = await prisma.teamMember.findMany({
       where: { userId: req.user.id },
       include: {
         team: {
@@ -74,7 +75,15 @@ const getMyTeam = async (req, res, next) => {
         },
       },
     });
-    res.json({ team: membership ? membership.team : null, role: membership?.role || null });
+
+    const result = { TWO_V_TWO: null, FIVE_V_FIVE: null };
+    for (const m of memberships) {
+      const mode = m.team.mode;
+      if (mode === 'TWO_V_TWO' || mode === 'FIVE_V_FIVE') {
+        result[mode] = { team: m.team, role: m.role };
+      }
+    }
+    res.json(result);
   } catch (err) { next(err); }
 };
 
@@ -103,11 +112,24 @@ const getMyInvitations = async (req, res, next) => {
 
 const createTeam = async (req, res, next) => {
   try {
-    const { name, tag, description, region } = req.body;
+    const { name, tag, description, region, mode = 'FIVE_V_FIVE' } = req.body;
     const userId = req.user.id;
 
-    const existingCap = await prisma.teamMember.findFirst({ where: { userId, role: 'CAPTAIN' } });
-    if (existingCap) return res.status(400).json({ error: 'Vous êtes déjà capitaine d\'une équipe.' });
+    // Un seul capitaine par mode
+    const existingCap = await prisma.teamMember.findFirst({
+      where: { userId, role: 'CAPTAIN', team: { mode } },
+    });
+    if (existingCap) {
+      return res.status(400).json({ error: `Vous êtes déjà capitaine d'une équipe ${mode === 'TWO_V_TWO' ? '2v2' : '5v5'}.` });
+    }
+
+    // Un seul membre par mode
+    const existingMember = await prisma.teamMember.findFirst({
+      where: { userId, team: { mode } },
+    });
+    if (existingMember) {
+      return res.status(400).json({ error: `Vous êtes déjà membre d'une équipe ${mode === 'TWO_V_TWO' ? '2v2' : '5v5'}.` });
+    }
 
     const team = await prisma.team.create({
       data: {
@@ -115,6 +137,7 @@ const createTeam = async (req, res, next) => {
         tag: tag.toUpperCase(),
         description,
         region: region || 'EU',
+        mode,
         members: { create: { userId, role: 'CAPTAIN' } },
       },
       include: { members: MEMBER_SELECT },
@@ -264,12 +287,23 @@ const leaveTeam = async (req, res, next) => {
 
 const acceptInvitation = async (req, res, next) => {
   try {
-    const inv = await prisma.teamInvitation.findUnique({ where: { id: req.params.invitationId } });
+    const inv = await prisma.teamInvitation.findUnique({
+      where: { id: req.params.invitationId },
+      include: { team: { select: { mode: true, name: true } } },
+    });
     if (!inv || inv.receiverId !== req.user.id) return res.status(404).json({ error: 'Invitation introuvable' });
     if (inv.status !== 'PENDING') return res.status(400).json({ error: 'Invitation déjà traitée' });
     if (inv.expiresAt < new Date()) {
       await prisma.teamInvitation.update({ where: { id: inv.id }, data: { status: 'EXPIRED' } });
       return res.status(400).json({ error: 'Invitation expirée' });
+    }
+
+    // Vérifie qu'on n'est pas déjà dans une équipe de ce mode
+    const alreadyMember = await prisma.teamMember.findFirst({
+      where: { userId: req.user.id, team: { mode: inv.team.mode } },
+    });
+    if (alreadyMember) {
+      return res.status(400).json({ error: `Vous êtes déjà dans une équipe ${inv.team.mode === 'TWO_V_TWO' ? '2v2' : '5v5'}.` });
     }
 
     await prisma.$transaction([
