@@ -77,8 +77,10 @@ model User {
   role          Role     @default(USER)
   isBanned      Boolean  @default(false)
   banExpiresAt  DateTime?
-  preferredRole String?
-  region        String?  @default("EU")
+  preferredRole   String?
+  region          String?  @default("EU")
+  bio             String?
+  favoritePokemon String?
 
   // Elo global + par mode
   eloGlobal     Int      @default(1000)

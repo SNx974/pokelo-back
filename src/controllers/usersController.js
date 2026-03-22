@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 
 const userPublicSelect = {
   id: true, username: true, avatarUrl: true, region: true, preferredRole: true,
+  bio: true, favoritePokemon: true,
   eloGlobal: true, elo2v2: true, elo5v5: true,
   wins: true, losses: true, totalMatches: true, winStreak: true, bestStreak: true,
   createdAt: true, lastActiveAt: true,
@@ -97,7 +98,7 @@ const getEloHistory = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   try {
-    const { username, region, preferredRole } = req.body;
+    const { username, region, preferredRole, bio, favoritePokemon } = req.body;
 
     // Check username taken
     if (username) {
@@ -107,7 +108,13 @@ const updateProfile = async (req, res, next) => {
 
     const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data: { ...(username && { username }), ...(region && { region }), ...(preferredRole !== undefined && { preferredRole }) },
+      data: {
+        ...(username && { username }),
+        ...(region && { region }),
+        ...(preferredRole !== undefined && { preferredRole }),
+        ...(bio !== undefined && { bio: bio || null }),
+        ...(favoritePokemon !== undefined && { favoritePokemon: favoritePokemon || null }),
+      },
       select: userPublicSelect,
     });
 
