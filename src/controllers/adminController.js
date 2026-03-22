@@ -240,10 +240,76 @@ const deleteNews = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ─── Gestion équipes (admin) ──────────────────────────────────────────────────
+
+const adminListTeams = async (req, res, next) => {
+  try {
+    const { q, mode, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = {
+      ...(q    ? { name: { contains: q, mode: 'insensitive' } } : {}),
+      ...(mode ? { mode } : {}),
+    };
+    const [teams, total] = await Promise.all([
+      prisma.team.findMany({
+        where, skip, take: parseInt(limit),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          members: {
+            include: { user: { select: { id: true, username: true, avatarUrl: true, eloGlobal: true } } },
+            orderBy: { role: 'asc' },
+          },
+        },
+      }),
+      prisma.team.count({ where }),
+    ]);
+    res.json({ teams, total, page: parseInt(page) });
+  } catch (err) { next(err); }
+};
+
+const adminDeleteTeam = async (req, res, next) => {
+  try {
+    await prisma.team.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Équipe supprimée' });
+  } catch (err) { next(err); }
+};
+
+const adminAddMember = async (req, res, next) => {
+  try {
+    const { userId, role = 'MEMBER' } = req.body;
+    const team = await prisma.team.findUnique({ where: { id: req.params.id } });
+    if (!team) return res.status(404).json({ error: 'Équipe introuvable' });
+
+    const existing = await prisma.teamMember.findFirst({ where: { teamId: team.id, userId } });
+    if (existing) return res.status(400).json({ error: 'Ce joueur est déjà dans l\'équipe' });
+
+    const alreadyInMode = await prisma.teamMember.findFirst({ where: { userId, team: { mode: team.mode } } });
+    if (alreadyInMode) return res.status(400).json({ error: `Ce joueur est déjà dans une équipe ${team.mode === 'TWO_V_TWO' ? '2v2' : '5v5'}` });
+
+    await prisma.teamMember.create({ data: { teamId: team.id, userId, role } });
+    const updated = await prisma.team.findUnique({
+      where: { id: team.id },
+      include: { members: { include: { user: { select: { id: true, username: true, avatarUrl: true, eloGlobal: true } } }, orderBy: { role: 'asc' } } },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+};
+
+const adminRemoveMember = async (req, res, next) => {
+  try {
+    const { id: teamId, userId } = req.params;
+    const member = await prisma.teamMember.findFirst({ where: { teamId, userId } });
+    if (!member) return res.status(404).json({ error: 'Membre introuvable' });
+    await prisma.teamMember.delete({ where: { id: member.id } });
+    res.json({ message: 'Membre retiré' });
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   getDashboard, listUsers, banUser, unbanUser, updateUserRole,
   listDisputes, resolveDispute,
   listReports, resolveReport,
   overrideMatchResult,
   listAllNews, createNews, updateNews, deleteNews,
+  adminListTeams, adminDeleteTeam, adminAddMember, adminRemoveMember,
 };

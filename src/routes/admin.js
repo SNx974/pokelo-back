@@ -31,4 +31,10 @@ router.post('/news',                       adminController.createNews);
 router.patch('/news/:id',                  adminController.updateNews);
 router.delete('/news/:id',                 adminController.deleteNews);
 
+// Équipes
+router.get('/teams',                       adminController.adminListTeams);
+router.delete('/teams/:id',               adminController.adminDeleteTeam);
+router.post('/teams/:id/members',          adminController.adminAddMember);
+router.delete('/teams/:id/members/:userId', adminController.adminRemoveMember);
+
 module.exports = router;
