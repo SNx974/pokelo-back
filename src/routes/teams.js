@@ -5,9 +5,13 @@ const teamsController = require('../controllers/teamsController');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 
-router.get('/',       optionalAuth, teamsController.listTeams);
-router.get('/:id',    optionalAuth, teamsController.getTeam);
+// ─── Lecture ──────────────────────────────────────────────────────────────────
+router.get('/',     optionalAuth, teamsController.listTeams);
+// /my avant /:id pour éviter le conflit de route
+router.get('/my',   authenticate, teamsController.getMyTeam);
+router.get('/:id',  optionalAuth, teamsController.getTeam);
 
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
 router.post('/',
   authenticate,
   [
@@ -19,17 +23,18 @@ router.post('/',
   validate,
   teamsController.createTeam,
 );
+router.patch('/:id',   authenticate, teamsController.updateTeam);
+router.delete('/:id',  authenticate, teamsController.deleteTeam);
 
-router.patch('/:id',     authenticate, teamsController.updateTeam);
-router.delete('/:id',    authenticate, teamsController.deleteTeam);
+// ─── Membres ──────────────────────────────────────────────────────────────────
+router.post('/:id/invite', authenticate, teamsController.invitePlayer);
+router.post('/:id/kick',   authenticate, teamsController.kickMember);
+router.post('/:id/leave',  authenticate, teamsController.leaveTeam);
 
-// Membres
-router.post('/:id/invite',  authenticate, teamsController.invitePlayer);
-router.post('/:id/kick',    authenticate, teamsController.kickMember);
-router.post('/:id/leave',   authenticate, teamsController.leaveTeam);
-
-// Invitations
-router.post('/invitations/:invitationId/accept',  authenticate, teamsController.acceptInvitation);
-router.post('/invitations/:invitationId/decline', authenticate, teamsController.declineInvitation);
+// ─── Invitations ──────────────────────────────────────────────────────────────
+router.get('/invitations/my',                             authenticate, teamsController.getMyInvitations);
+router.post('/invitations/:invitationId/cancel',          authenticate, teamsController.cancelInvitation);
+router.post('/invitations/:invitationId/accept',          authenticate, teamsController.acceptInvitation);
+router.post('/invitations/:invitationId/decline',         authenticate, teamsController.declineInvitation);
 
 module.exports = router;
