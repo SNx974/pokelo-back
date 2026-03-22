@@ -110,6 +110,7 @@ model User {
   queueEntries      QueueEntry[]
   chatMessages      ChatMessage[]
   scoreSubmissions  MatchScoreSubmission[]
+  matchAcceptances  MatchAcceptance[]
 
   @@index([eloGlobal])
   @@index([elo2v2])
@@ -125,6 +126,9 @@ model Team {
   avatarUrl   String?
   description String?
   region      String?  @default("EU")
+
+  // Mode de l'équipe
+  mode        GameMode @default(FIVE_V_FIVE)
 
   // Stats
   eloTeam     Int      @default(1000)
@@ -200,6 +204,9 @@ model Match {
   winnerTeamId  String?
   winnerSide    Int?        // 1 ou 2
 
+  // Acceptation du match
+  acceptExpiresAt DateTime?  // deadline pour accepter
+
   startedAt     DateTime?
   completedAt   DateTime?
   createdAt     DateTime    @default(now())
@@ -212,6 +219,7 @@ model Match {
   eloChanges          EloHistory[]
   chatMessages        ChatMessage[]
   scoreSubmissions    MatchScoreSubmission[]
+  acceptances         MatchAcceptance[]
 
   @@index([status])
   @@index([mode])
@@ -356,6 +364,22 @@ model News {
   updatedAt   DateTime @updatedAt
 
   author      User @relation(fields: [authorId], references: [id])
+}
+
+// ─── Match Acceptance ─────────────────────────────────────────────────────────
+
+model MatchAcceptance {
+  id          String   @id @default(uuid())
+  matchId     String
+  userId      String
+  accepted    Boolean?
+  respondedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  match       Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
 }
 
 // ─── Tournament ───────────────────────────────────────────────────────────────

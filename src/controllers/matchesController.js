@@ -1,7 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
 const { calculateMatchElo } = require('../services/eloService');
-const { broadcastToUser, broadcastToRoom, broadcastToMatch } = require('../websocket/broadcaster');
+const { broadcastToUser } = require('../websocket/broadcaster');
 const { finalizeMatch } = require('../services/matchTimeoutService');
+const { acceptMatch: svcAcceptMatch, declineMatch: svcDeclineMatch } = require('../services/matchmakingService');
 
 const prisma = new PrismaClient();
 
@@ -47,6 +48,30 @@ const getMatch = async (req, res, next) => {
     });
     if (!match) return res.status(404).json({ error: 'Match introuvable' });
     res.json(match);
+  } catch (err) { next(err); }
+};
+
+/**
+ * Récupère le match PENDING (en attente d'acceptation) de l'utilisateur connecté.
+ */
+const getPendingMatch = async (req, res, next) => {
+  try {
+    const participant = await prisma.matchParticipant.findFirst({
+      where: { userId: req.user.id, match: { status: 'PENDING' } },
+      include: {
+        match: {
+          include: {
+            participants: {
+              include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+            },
+            acceptances: true,
+          },
+        },
+      },
+    });
+
+    if (!participant) return res.json({ match: null });
+    res.json({ match: participant.match });
   } catch (err) { next(err); }
 };
 
@@ -276,13 +301,40 @@ const sendChatMessage = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const acceptMatchHandler = async (req, res, next) => {
+  try {
+    const result = await svcAcceptMatch(req.params.id, req.user.id);
+    res.json({ message: 'Accepté', allAccepted: result.allAccepted });
+  } catch (err) {
+    if (err.message.includes('introuvable') || err.message.includes('participant')) {
+      return res.status(404).json({ error: err.message });
+    }
+    return res.status(400).json({ error: err.message });
+  }
+};
+
+const declineMatchHandler = async (req, res, next) => {
+  try {
+    await svcDeclineMatch(req.params.id, req.user.id);
+    res.json({ message: 'Refusé — match annulé.' });
+  } catch (err) {
+    if (err.message.includes('introuvable') || err.message.includes('participant')) {
+      return res.status(404).json({ error: err.message });
+    }
+    return res.status(400).json({ error: err.message });
+  }
+};
+
 module.exports = {
   listMatches,
   getMatch,
+  getPendingMatch,
   getActiveMatch,
   submitResult,
   createDispute,
   reportMatch,
   getChatMessages,
   sendChatMessage,
+  acceptMatchHandler,
+  declineMatchHandler,
 };

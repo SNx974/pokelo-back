@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { broadcastToUser } = require('../websocket/broadcaster');
+const { broadcastToUser, isUserOnline } = require('../websocket/broadcaster');
 
 const prisma = new PrismaClient();
 
@@ -301,9 +301,26 @@ const declineInvitation = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+/**
+ * Retourne le statut online (WS) de chaque membre d'une équipe.
+ */
+const getTeamOnlineStatus = async (req, res, next) => {
+  try {
+    const members = await prisma.teamMember.findMany({
+      where: { teamId: req.params.id },
+      select: { userId: true },
+    });
+    const result = {};
+    for (const m of members) {
+      result[m.userId] = isUserOnline(m.userId);
+    }
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
 module.exports = {
   listTeams, getTeam, getMyTeam, getMyInvitations,
   createTeam, updateTeam, deleteTeam,
   invitePlayer, cancelInvitation, kickMember, leaveTeam,
-  acceptInvitation, declineInvitation,
+  acceptInvitation, declineInvitation, getTeamOnlineStatus,
 };

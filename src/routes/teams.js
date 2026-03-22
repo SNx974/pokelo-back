@@ -9,7 +9,8 @@ const { validate } = require('../middleware/validate');
 router.get('/',     optionalAuth, teamsController.listTeams);
 // /my avant /:id pour éviter le conflit de route
 router.get('/my',   authenticate, teamsController.getMyTeam);
-router.get('/:id',  optionalAuth, teamsController.getTeam);
+router.get('/:id',              optionalAuth, teamsController.getTeam);
+router.get('/:id/online-status', authenticate, teamsController.getTeamOnlineStatus);
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 router.post('/',

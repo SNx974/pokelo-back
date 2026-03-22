@@ -57,4 +57,12 @@ function getOnlineCount() {
   return userConnections.size;
 }
 
-module.exports = { registerUser, unregisterUser, joinRoom, leaveRoom, broadcastToUser, broadcastToRoom, broadcastAll, getOnlineCount };
+function isUserOnline(userId) {
+  return userConnections.has(userId) && userConnections.get(userId).size > 0;
+}
+
+function getOnlineUserIds() {
+  return [...userConnections.keys()];
+}
+
+module.exports = { registerUser, unregisterUser, joinRoom, leaveRoom, broadcastToUser, broadcastToRoom, broadcastAll, getOnlineCount, isUserOnline, getOnlineUserIds };
