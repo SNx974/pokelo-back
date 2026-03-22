@@ -7,14 +7,14 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Admin
-  const adminPass = await bcrypt.hash('Admin1234!', 12);
+  // Admin principal
+  const adminPass = await bcrypt.hash('Lolilol974', 12);
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@pokelo.gg' },
-    update: {},
+    where: { email: 'pokélo@gmail.com' },
+    update: { passwordHash: adminPass, role: 'ADMIN' },
     create: {
-      username: 'PokeloAdmin',
-      email: 'admin@pokelo.gg',
+      username: 'Pokélo',
+      email: 'pokélo@gmail.com',
       passwordHash: adminPass,
       role: 'ADMIN',
       eloGlobal: 2000,
@@ -23,7 +23,25 @@ async function main() {
       region: 'EU',
     },
   });
-  console.log(`✅ Admin: ${admin.username}`);
+  console.log(`✅ Admin: ${admin.username} (${admin.email})`);
+
+  // Admin secondaire (legacy)
+  const adminPass2 = await bcrypt.hash('Admin1234!', 12);
+  const admin2 = await prisma.user.upsert({
+    where: { email: 'admin@pokelo.gg' },
+    update: {},
+    create: {
+      username: 'PokeloAdmin',
+      email: 'admin@pokelo.gg',
+      passwordHash: adminPass2,
+      role: 'ADMIN',
+      eloGlobal: 2000,
+      elo2v2: 2000,
+      elo5v5: 2000,
+      region: 'EU',
+    },
+  });
+  console.log(`✅ Admin legacy: ${admin2.username}`);
 
   // Sample players
   const players = [

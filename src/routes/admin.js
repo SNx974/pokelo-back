@@ -5,14 +5,30 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 
 router.use(authenticate, requireAdmin);
 
-router.get('/dashboard',          adminController.getDashboard);
-router.get('/users',              adminController.listUsers);
-router.patch('/users/:id/ban',    adminController.banUser);
-router.patch('/users/:id/unban',  adminController.unbanUser);
-router.get('/disputes',           adminController.listDisputes);
-router.patch('/disputes/:id',     adminController.resolveDispute);
-router.get('/reports',            adminController.listReports);
-router.patch('/reports/:id',      adminController.resolveReport);
-router.post('/matches/:id/override', adminController.overrideMatchResult);
+// Dashboard
+router.get('/dashboard',                   adminController.getDashboard);
+
+// Utilisateurs
+router.get('/users',                       adminController.listUsers);
+router.patch('/users/:id/ban',             adminController.banUser);
+router.patch('/users/:id/unban',           adminController.unbanUser);
+router.patch('/users/:id/role',            adminController.updateUserRole);
+
+// Litiges
+router.get('/disputes',                    adminController.listDisputes);
+router.patch('/disputes/:id',              adminController.resolveDispute);
+
+// Signalements
+router.get('/reports',                     adminController.listReports);
+router.patch('/reports/:id',               adminController.resolveReport);
+
+// Matchs
+router.post('/matches/:id/override',       adminController.overrideMatchResult);
+
+// News
+router.get('/news',                        adminController.listAllNews);
+router.post('/news',                       adminController.createNews);
+router.patch('/news/:id',                  adminController.updateNews);
+router.delete('/news/:id',                 adminController.deleteNews);
 
 module.exports = router;
