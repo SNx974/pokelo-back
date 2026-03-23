@@ -11,6 +11,8 @@ const routes = require('./routes');
 const { initWebSocket } = require('./websocket');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { globalRateLimit } = require('./middleware/rateLimit');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +62,17 @@ app.use(errorHandler);
 
 // WebSocket
 initWebSocket(server);
+
+// ─── Auto-unpin expired news (every minute) ───────────────────────────────────
+setInterval(async () => {
+  try {
+    const result = await prisma.news.updateMany({
+      where: { isPinned: true, pinnedUntil: { lte: new Date() } },
+      data: { isPinned: false, pinnedUntil: null },
+    });
+    if (result.count > 0) console.log(`📌 Auto-dépinglage : ${result.count} article(s)`);
+  } catch (err) { console.error('Auto-unpin error:', err.message); }
+}, 60 * 1000);
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
