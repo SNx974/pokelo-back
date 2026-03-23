@@ -217,14 +217,10 @@ const listAllNews = async (req, res, next) => {
 
 const createNews = async (req, res, next) => {
   try {
-    const { title, content, coverImage, isPinned, pinnedDuration, isPublished } = req.body;
+    const { title, content, coverImage, isPinned, isPublished } = req.body;
     if (!title || !content) return res.status(400).json({ error: 'Titre et contenu requis' });
-    const pinned = !!isPinned;
-    const pinnedUntil = pinned && pinnedDuration
-      ? new Date(Date.now() + parseInt(pinnedDuration) * 3600 * 1000)
-      : null;
     const news = await prisma.news.create({
-      data: { title, content, coverImage, isPinned: pinned, pinnedUntil, isPublished: !!isPublished, authorId: req.user.id },
+      data: { title, content, coverImage, isPinned: !!isPinned, isPublished: !!isPublished, authorId: req.user.id },
     });
     res.status(201).json(news);
   } catch (err) { next(err); }
@@ -232,20 +228,7 @@ const createNews = async (req, res, next) => {
 
 const updateNews = async (req, res, next) => {
   try {
-    const { pinnedDuration, isPinned, ...rest } = req.body;
-    const pinned = isPinned !== undefined ? !!isPinned : undefined;
-    let pinnedUntil;
-    if (pinned === true && pinnedDuration) {
-      pinnedUntil = new Date(Date.now() + parseInt(pinnedDuration) * 3600 * 1000);
-    } else if (pinned === false) {
-      pinnedUntil = null;
-    }
-    const data = {
-      ...rest,
-      ...(pinned !== undefined ? { isPinned: pinned } : {}),
-      ...(pinnedUntil !== undefined ? { pinnedUntil } : {}),
-    };
-    const news = await prisma.news.update({ where: { id: req.params.id }, data });
+    const news = await prisma.news.update({ where: { id: req.params.id }, data: req.body });
     res.json(news);
   } catch (err) { next(err); }
 };

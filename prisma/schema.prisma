@@ -360,7 +360,6 @@ model News {
   content     String   @db.Text
   coverImage  String?
   isPinned    Boolean  @default(false)
-  pinnedUntil DateTime?
   isPublished Boolean  @default(false)
   authorId    String
   createdAt   DateTime @default(now())
