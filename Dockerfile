@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 RUN npm install
 
+# Force cache invalidation on every build
+ARG CACHEBUST=1
 COPY . .
 RUN npx prisma generate
 
