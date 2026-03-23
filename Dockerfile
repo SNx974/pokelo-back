@@ -1,6 +1,6 @@
 FROM node:20-slim AS builder
 WORKDIR /app
-
+# cache-bust: mysql migration
 RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
