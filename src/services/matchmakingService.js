@@ -171,30 +171,38 @@ function balanceTeams(players, teamSize) {
 
 async function tryMatchmaking(mode, queueType) {
   const teamSize = TEAM_SIZES[mode];
-  const queue = queues[mode][queueType];
 
   if (queueType === 'SOLO') {
-    if (queue.length < teamSize * 2) return;
+    // Boucle : crée TOUS les matchs possibles en une seule passe
+    let foundMatch = true;
+    while (foundMatch) {
+      foundMatch = false;
 
-    queue.sort((a, b) => a.elo - b.elo);
+      const currentQueue = queues[mode][queueType];
+      if (currentQueue.length < teamSize * 2) break;
 
-    for (let i = 0; i <= queue.length - teamSize * 2; i++) {
-      const group = queue.slice(i, i + teamSize * 2);
-      const now = Date.now();
-      const minElo = group[0].elo;
-      const maxElo = group[group.length - 1].elo;
+      currentQueue.sort((a, b) => a.elo - b.elo);
 
-      const maxTolerance = Math.max(
-        ...group.map(e => getEloTolerance((now - e.joinedAt) / 1000))
-      );
+      for (let i = 0; i <= currentQueue.length - teamSize * 2; i++) {
+        const group = currentQueue.slice(i, i + teamSize * 2);
+        const now = Date.now();
+        const minElo = group[0].elo;
+        const maxElo = group[group.length - 1].elo;
 
-      if (maxElo - minElo <= maxTolerance) {
-        const { team1, team2 } = balanceTeams(group, teamSize);
-        await createPendingMatch(team1, team2, mode, queueType);
+        const maxTolerance = Math.max(
+          ...group.map(e => getEloTolerance((now - e.joinedAt) / 1000))
+        );
 
-        const matchedIds = group.map(e => e.userId).filter(Boolean);
-        queues[mode][queueType] = queue.filter(e => !matchedIds.includes(e.userId));
-        break;
+        if (maxElo - minElo <= maxTolerance) {
+          const { team1, team2 } = balanceTeams(group, teamSize);
+          await createPendingMatch(team1, team2, mode, queueType);
+
+          const matchedIds = new Set(group.map(e => e.userId).filter(Boolean));
+          queues[mode][queueType] = queues[mode][queueType].filter(e => !matchedIds.has(e.userId));
+
+          foundMatch = true; // relance la boucle avec la file mise à jour
+          break;
+        }
       }
     }
   }
