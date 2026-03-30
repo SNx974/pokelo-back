@@ -79,9 +79,23 @@ async function joinQueue(userId, mode, queueType, teamId = null) {
   console.log(`[Queue] ${user.username} rejoint ${mode}/${queueType} (Elo: ${elo})`);
 
   broadcastToUser(userId, { type: 'QUEUE_JOINED', data: { mode, queueType, elo } });
+  broadcastQueueSlotsUpdate(mode, queueType);
 
   await tryMatchmaking(mode, queueType);
   return entry;
+}
+
+// Broadcast le nombre de slots remplis à tous les joueurs dans la file
+function broadcastQueueSlotsUpdate(mode, queueType) {
+  const queue = queues[mode][queueType];
+  const teamSize = TEAM_SIZES[mode];
+  const payload = {
+    type: 'QUEUE_SLOTS_UPDATE',
+    data: { count: queue.length, total: teamSize * 2, mode, queueType },
+  };
+  for (const entry of queue) {
+    if (entry.userId) broadcastToUser(entry.userId, payload);
+  }
 }
 
 async function leaveQueue(userId) {
@@ -92,7 +106,11 @@ async function leaveQueue(userId) {
 
   for (const mode of ['TWO_V_TWO', 'FIVE_V_FIVE']) {
     for (const type of ['SOLO', 'TEAM']) {
+      const before = queues[mode][type].length;
       queues[mode][type] = queues[mode][type].filter(e => e.userId !== userId);
+      if (queues[mode][type].length < before) {
+        broadcastQueueSlotsUpdate(mode, type);
+      }
     }
   }
 
@@ -214,6 +232,14 @@ async function createPendingMatch(team1Entries, team2Entries, mode, queueType) {
   const allEntries = [...team1Entries, ...team2Entries];
   const expiresAt = new Date(Date.now() + ACCEPT_TIMEOUT_MS);
 
+  // Récupère les infos joueurs pour le reveal du lobby
+  const allUserIds = allEntries.map(e => e.userId).filter(Boolean);
+  const users = await prisma.user.findMany({
+    where: { id: { in: allUserIds } },
+    select: { id: true, username: true, avatarUrl: true },
+  });
+  const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+
   const match = await prisma.match.create({
     data: {
       mode,
@@ -248,8 +274,8 @@ async function createPendingMatch(team1Entries, team2Entries, mode, queueType) {
       mode,
       queueType,
       expiresAt: expiresAt.toISOString(),
-      team1: team1Entries.map(e => ({ userId: e.userId, elo: e.elo })),
-      team2: team2Entries.map(e => ({ userId: e.userId, elo: e.elo })),
+      team1: team1Entries.map(e => ({ userId: e.userId, elo: e.elo, username: userMap[e.userId]?.username || '???', avatarUrl: userMap[e.userId]?.avatarUrl || null })),
+      team2: team2Entries.map(e => ({ userId: e.userId, elo: e.elo, username: userMap[e.userId]?.username || '???', avatarUrl: userMap[e.userId]?.avatarUrl || null })),
     },
   };
 
