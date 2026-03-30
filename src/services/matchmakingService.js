@@ -259,8 +259,7 @@ async function createPendingMatch(team1Entries, team2Entries, mode, queueType) {
     include: { participants: true, acceptances: true },
   });
 
-  // Désactive les entrées de queue
-  const allUserIds = allEntries.map(e => e.userId).filter(Boolean);
+  // Désactive les entrées de queue (allUserIds déjà déclaré plus haut)
   await prisma.queueEntry.updateMany({
     where: { userId: { in: allUserIds }, isActive: true },
     data: { isActive: false },
