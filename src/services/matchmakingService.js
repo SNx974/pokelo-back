@@ -119,6 +119,54 @@ async function checkTeamOnline(teamId, mode) {
   }
 }
 
+// ─── Algorithme de balancement des équipes ────────────────────────────────────
+// Trouve la répartition la plus équilibrée possible en testant toutes les
+// combinaisons possibles (C(n*2, n)) et en minimisant la différence d'Elo moyen.
+// 2v2 → C(4,2) = 6 combinaisons | 5v5 → C(10,5) = 252 combinaisons (très rapide)
+
+function getCombinations(arr, k) {
+  const result = [];
+  function combine(start, combo) {
+    if (combo.length === k) { result.push([...combo]); return; }
+    for (let i = start; i <= arr.length - (k - combo.length); i++) {
+      combine(i + 1, [...combo, arr[i]]);
+    }
+  }
+  combine(0, []);
+  return result;
+}
+
+function balanceTeams(players, teamSize) {
+  const sorted = [...players].sort((a, b) => b.elo - a.elo);
+
+  let bestDiff = Infinity;
+  let bestTeam1 = null;
+  let bestTeam2 = null;
+
+  const combos = getCombinations(sorted, teamSize);
+
+  for (const team1 of combos) {
+    const team1Ids = new Set(team1.map(p => p.userId));
+    const team2    = sorted.filter(p => !team1Ids.has(p.userId));
+
+    const avg1 = team1.reduce((s, p) => s + p.elo, 0) / teamSize;
+    const avg2 = team2.reduce((s, p) => s + p.elo, 0) / teamSize;
+    const diff = Math.abs(avg1 - avg2);
+
+    if (diff < bestDiff) {
+      bestDiff  = diff;
+      bestTeam1 = team1;
+      bestTeam2 = team2;
+    }
+  }
+
+  const avgT1 = Math.round(bestTeam1.reduce((s, p) => s + p.elo, 0) / teamSize);
+  const avgT2 = Math.round(bestTeam2.reduce((s, p) => s + p.elo, 0) / teamSize);
+  console.log(`[Balancing] Meilleure répartition trouvée — diff Elo: ${Math.round(bestDiff)} (T1 avg: ${avgT1} | T2 avg: ${avgT2})`);
+
+  return { team1: bestTeam1, team2: bestTeam2 };
+}
+
 // ─── Matchmaking ──────────────────────────────────────────────────────────────
 
 async function tryMatchmaking(mode, queueType) {
@@ -141,8 +189,7 @@ async function tryMatchmaking(mode, queueType) {
       );
 
       if (maxElo - minElo <= maxTolerance) {
-        const team1 = group.slice(0, teamSize);
-        const team2 = group.slice(teamSize, teamSize * 2);
+        const { team1, team2 } = balanceTeams(group, teamSize);
         await createPendingMatch(team1, team2, mode, queueType);
 
         const matchedIds = group.map(e => e.userId).filter(Boolean);
